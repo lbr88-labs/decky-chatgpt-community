@@ -59,6 +59,10 @@ const checkUpdates = callable<[], OperationResult>("check_updates");
 const listRecentChats = callable<[string | null], RecentChatPage>("list_recent_chats");
 const openRecentChat = callable<[string], OperationResult>("open_recent_chat");
 const openRecentChatWithVoice = callable<[string], OperationResult>("open_recent_chat_with_voice");
+const muteMicrophone = callable<[], OperationResult>("mute_microphone");
+const unmuteMicrophone = callable<[], OperationResult>("unmute_microphone");
+const muteSpeaker = callable<[], OperationResult>("mute_speaker");
+const unmuteSpeaker = callable<[], OperationResult>("unmute_speaker");
 
 const menuCloseDelay = () =>
   new Promise<void>((resolve) => window.setTimeout(resolve, 250));
@@ -242,6 +246,38 @@ function Content() {
           <ButtonItem layout="below" disabled={busy} onClick={() => void refresh()}>
             Refresh Status
           </ButtonItem>
+        </PanelSectionRow>
+      </PanelSection>
+
+      <PanelSection title="Voice controls">
+        {[
+          ["Mute microphone", muteMicrophone],
+          ["Unmute microphone", unmuteMicrophone],
+          ["Mute speaker", muteSpeaker],
+          ["Unmute speaker", unmuteSpeaker],
+        ].map(([label, operation]) => (
+          <PanelSectionRow key={label as string}>
+            <ButtonItem
+              layout="below"
+              disabled={busy || !installed || launch === null}
+              onClick={() => void runOperation(
+                label as string,
+                () => runWithChatGPTForeground(
+                  steamDependencies(),
+                  launch!,
+                  operation as () => Promise<OperationResult>,
+                ),
+                true,
+              )}
+            >
+              {label as string}
+            </ButtonItem>
+          </PanelSectionRow>
+        ))}
+        <PanelSectionRow>
+          <div style={{ width: "100%", opacity: 0.75 }}>
+            These controls affect only the active ChatGPT voice session.
+          </div>
         </PanelSectionRow>
       </PanelSection>
 

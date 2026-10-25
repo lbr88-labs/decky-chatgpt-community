@@ -96,7 +96,10 @@ class Installation:
         return {
             "executable": str(self.launch_executable),
             "startDirectory": str(self.start_directory),
-            "launchOptions": 'LD_PRELOAD="" %command%',
+            "launchOptions": (
+                'LD_PRELOAD="" %command% '
+                '--remote-debugging-address=127.0.0.1 --remote-debugging-port=9223'
+            ),
         }
 
 

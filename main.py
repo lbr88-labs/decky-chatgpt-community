@@ -57,6 +57,18 @@ class Plugin:
     async def open_recent_chat_with_voice(self, selection_token):
         return await self._operation("open_recent_chat_with_voice", selection_token)
 
+    async def mute_microphone(self):
+        return await self._operation("mute_microphone")
+
+    async def unmute_microphone(self):
+        return await self._operation("unmute_microphone")
+
+    async def mute_speaker(self):
+        return await self._operation("mute_speaker")
+
+    async def unmute_speaker(self):
+        return await self._operation("unmute_speaker")
+
     async def check_updates(self):
         return await self._operation("check_updates")
 

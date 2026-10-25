@@ -1,4 +1,5 @@
 import os
+import json
 import subprocess
 import time
 from collections.abc import Callable
@@ -164,6 +165,41 @@ class ChatGPTController:
         if not voice.ok:
             return voice
         return OperationResult(True, "Opened the selected chat and started Voice Mode")
+
+    def mute_microphone(self) -> OperationResult:
+        return self._set_voice_control("mute-microphone")
+
+    def unmute_microphone(self) -> OperationResult:
+        return self._set_voice_control("unmute-microphone")
+
+    def mute_speaker(self) -> OperationResult:
+        return self._set_voice_control("mute-speaker")
+
+    def unmute_speaker(self) -> OperationResult:
+        return self._set_voice_control("unmute-speaker")
+
+    def _set_voice_control(self, action: str) -> OperationResult:
+        window = self._ensure_window()
+        if isinstance(window, OperationResult):
+            return window
+        environment, window_id = window
+        focused = self._focus(environment, window_id)
+        if not focused.ok:
+            return focused
+        helper = Path(__file__).with_name("voice_controls.mjs")
+        try:
+            result = self._runner(
+                ("/usr/bin/node", str(helper), action),
+                env=environment,
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+            payload = json.loads(result.stdout)
+        except (OSError, subprocess.SubprocessError, json.JSONDecodeError):
+            return OperationResult(False, "ChatGPT voice controls are unavailable; reopen the app through Decky")
+        return OperationResult(bool(payload.get("ok")), str(payload.get("message") or "Voice control failed"))
 
     def check_updates(self) -> OperationResult:
         installation = self._installation_selector()

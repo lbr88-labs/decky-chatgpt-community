@@ -40,6 +40,8 @@ class XdotoolRunner:
             return subprocess.CompletedProcess(args, 0, "WIDTH=100\nHEIGHT=100\n", "")
         if command == ("/usr/bin/xdotool", "getwindowgeometry", "--shell", "20"):
             return subprocess.CompletedProcess(args, 0, "WIDTH=640\nHEIGHT=480\n", "")
+        if command[:2] == ("/usr/bin/node", str(Path(__file__).parents[1] / "backend" / "voice_controls.mjs")):
+            return subprocess.CompletedProcess(args, 0, '{"ok":true,"message":"updated"}\n', "")
         return subprocess.CompletedProcess(args, 0, "", "")
 
 
@@ -379,12 +381,36 @@ class ControllerTests(unittest.TestCase):
             {
                 "executable": "/home/deck/.local/share/chatgpt-community-appimage/launch-appimage.sh",
                 "startDirectory": "/home/deck/.local/share/chatgpt-community-appimage",
-                "launchOptions": 'LD_PRELOAD="" %command%',
+                "launchOptions": (
+                    'LD_PRELOAD="" %command% '
+                    '--remote-debugging-address=127.0.0.1 --remote-debugging-port=9223'
+                ),
             },
         )
         self.assertFalse(status["voiceCompatible"])
         self.assertEqual(status["voiceState"], "pending")
         self.assertIn("start", status["voiceMessage"].lower())
+
+    def test_explicit_voice_controls_use_only_the_app_control_helper(self):
+        runner = XdotoolRunner(windows=("20",))
+        controller = self._controller(runner=runner)
+
+        results = [
+            controller.mute_microphone(),
+            controller.unmute_microphone(),
+            controller.mute_speaker(),
+            controller.unmute_speaker(),
+        ]
+
+        self.assertTrue(all(result.ok for result in results))
+        helper_calls = [call for call in runner.calls if call[:1] == ("/usr/bin/node",)]
+        self.assertEqual([call[-1] for call in helper_calls], [
+            "mute-microphone",
+            "unmute-microphone",
+            "mute-speaker",
+            "unmute-speaker",
+        ])
+        self.assertFalse(any(call[0] in {"pactl", "wpctl", "amixer"} for call in runner.calls))
 
 
 if __name__ == "__main__":
