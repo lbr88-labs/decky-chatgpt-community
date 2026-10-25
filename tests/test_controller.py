@@ -7,6 +7,7 @@ from backend.compatibility import VoiceContract
 from backend.controller import ChatGPTController
 from backend.installations import Installation
 from backend.processes import AppProcess
+from backend.sessions import RecentSession, SessionPage
 
 
 class XdotoolRunner:
@@ -68,6 +69,7 @@ class ControllerTests(unittest.TestCase):
         popen=None,
         environment_builder=None,
         installation=None,
+        sessions=None,
     ):
         selected = installation or Installation.native()
         return ChatGPTController(
@@ -81,12 +83,49 @@ class ControllerTests(unittest.TestCase):
             launch_attempts=2,
             app_asar=Path("/fake/app.asar"),
             uid=1000,
+            session_client=sessions,
             **(
                 {"environment_builder": environment_builder}
                 if environment_builder is not None
                 else {}
             ),
         )
+
+    def test_recent_chats_are_serialized_without_thread_ids(self):
+        class Sessions:
+            def list_recent(self, cursor=None):
+                self.cursor = cursor
+                return SessionPage((RecentSession("safe", "secret", "Chat", 42),), "next")
+
+        sessions = Sessions()
+        result = self._controller(sessions=sessions).list_recent_chats("page")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(sessions.cursor, "page")
+        self.assertNotIn("secret", repr(result))
+        self.assertEqual(result["items"][0]["selectionToken"], "safe")
+
+    def test_open_recent_chat_uses_resolved_deep_link(self):
+        class Sessions:
+            def resolve(self, token):
+                return RecentSession(token, "thread-123", "Chat", 42) if token == "safe" else None
+
+        runner = XdotoolRunner(windows=("20",))
+        result = self._controller(runner=runner, sessions=Sessions()).open_recent_chat("safe")
+
+        self.assertTrue(result.ok)
+        self.assertIn(("/usr/bin/xdg-open", "codex://threads/thread-123"), runner.calls)
+
+    def test_open_recent_chat_rejects_stale_token_without_deep_link(self):
+        class Sessions:
+            def resolve(self, _token):
+                return None
+
+        runner = XdotoolRunner(windows=("20",))
+        result = self._controller(runner=runner, sessions=Sessions()).open_recent_chat("stale")
+
+        self.assertFalse(result.ok)
+        self.assertFalse(any("xdg-open" in call for call in runner.calls))
 
     def test_voice_fails_closed_before_input_when_contract_is_missing(self):
         runner = XdotoolRunner()
