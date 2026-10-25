@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .installations import Installation
 from .models import OperationResult
 
 
@@ -63,7 +64,15 @@ def read_updater_status(runner: Runner = subprocess.run) -> dict[str, Any] | Non
     return parsed if isinstance(parsed, dict) else None
 
 
-def request_update_check(runner: Runner = subprocess.run) -> OperationResult:
+def request_update_check(
+    installation: Installation,
+    runner: Runner = subprocess.run,
+) -> OperationResult:
+    if installation.mode == "appimage":
+        return OperationResult(
+            True,
+            "AppImage updates use the ChatGPT Community Steam Deck installer; run it again to check and update",
+        )
     result = _run(runner, ("/usr/bin/codex-update-manager", "check-now"))
     if result is None:
         return OperationResult(False, "Could not run the ChatGPT Community updater")

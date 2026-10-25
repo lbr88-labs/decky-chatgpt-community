@@ -1,9 +1,8 @@
 from dataclasses import dataclass
 from pathlib import Path
 
+from .installations import Installation, select_installation
 
-_APP_EXECUTABLE = "/opt/codex-desktop/ChatGPT"
-_APP_LAUNCHER = "/usr/bin/codex-desktop"
 _DISPLAY_KEYS = {
     "DBUS_SESSION_BUS_ADDRESS",
     "DISPLAY",
@@ -41,8 +40,14 @@ def _environment(path: Path) -> dict[str, str]:
     return result
 
 
-def find_app_processes(proc_root: Path = Path("/proc")) -> list[AppProcess]:
+def find_app_processes(
+    installation: Installation | None = None,
+    proc_root: Path = Path("/proc"),
+) -> list[AppProcess]:
     result: list[AppProcess] = []
+    selected = installation or select_installation()
+    if selected is None:
+        return result
     try:
         entries = sorted(
             (entry for entry in proc_root.iterdir() if entry.name.isdigit()),
@@ -55,8 +60,12 @@ def find_app_processes(proc_root: Path = Path("/proc")) -> list[AppProcess]:
         try:
             executable = str((entry / "exe").readlink())
             cmdline = _nul_items(entry / "cmdline")
-            is_app = executable == _APP_EXECUTABLE
-            is_launcher = bool(cmdline) and cmdline[0] == _APP_LAUNCHER
+            is_app = selected.matches_executable(executable)
+            is_launcher = (
+                selected.mode == "native"
+                and bool(cmdline)
+                and cmdline[0] == str(selected.launch_executable)
+            )
             if not is_app and not is_launcher:
                 continue
             result.append(

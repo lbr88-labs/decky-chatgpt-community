@@ -3,10 +3,18 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from backend.installations import Installation
 from backend.processes import find_app_processes
 
 
 class AppProcessTests(unittest.TestCase):
+    def setUp(self):
+        self.native = Installation.native()
+        self.appimage = Installation.appimage(
+            Path("/home/deck/.local/share/chatgpt-community-appimage"),
+            Path("/home/deck/.cache/chatgpt-runtime"),
+        )
+
     def _process(
         self,
         root: Path,
@@ -50,7 +58,7 @@ class AppProcessTests(unittest.TestCase):
                 environment={"DISPLAY": ":4"},
             )
 
-            result = find_app_processes(proc)
+            result = find_app_processes(self.native, proc)
 
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].pid, 200)
@@ -82,7 +90,7 @@ class AppProcessTests(unittest.TestCase):
                 environment={"DISPLAY": ":1"},
             )
 
-            result = find_app_processes(proc)
+            result = find_app_processes(self.native, proc)
 
         self.assertEqual([process.pid for process in result], [300])
 
@@ -92,9 +100,44 @@ class AppProcessTests(unittest.TestCase):
             (proc / "400").mkdir()
             (proc / "not-a-pid").mkdir()
 
-            result = find_app_processes(proc)
+            result = find_app_processes(self.native, proc)
 
         self.assertEqual(result, [])
+
+    def test_appimage_matches_only_main_executable_in_its_runtime_shape(self):
+        with tempfile.TemporaryDirectory() as directory:
+            proc = Path(directory)
+            valid = (
+                "/home/deck/.cache/chatgpt-runtime/run.A1b2/"
+                "appimage_extracted_deadbeef/opt/codex-desktop/ChatGPT"
+            )
+            self._process(
+                proc,
+                500,
+                executable=valid,
+                cmdline=(valid, "--class=chatgpt-community-appimage"),
+                environment={"DISPLAY": ":7"},
+            )
+            self._process(
+                proc,
+                501,
+                executable=valid.replace("ChatGPT", "browser_crashpad_handler"),
+                cmdline=("browser_crashpad_handler",),
+                environment={"DISPLAY": ":7"},
+            )
+            lookalike = "/tmp/run.A1b2/appimage_extracted_deadbeef/opt/codex-desktop/ChatGPT"
+            self._process(
+                proc,
+                502,
+                executable=lookalike,
+                cmdline=(lookalike,),
+                environment={"DISPLAY": ":7"},
+            )
+
+            result = find_app_processes(self.appimage, proc)
+
+        self.assertEqual([process.pid for process in result], [500])
+        self.assertEqual(result[0].executable, valid)
 
 
 if __name__ == "__main__":

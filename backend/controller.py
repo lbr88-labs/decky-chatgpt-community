@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .compatibility import VoiceContract, check_voice_contract
 from .desktop import graphical_environment
+from .installations import Installation, select_installation
 from .models import OperationResult
 from .processes import AppProcess, find_app_processes
 from .status import read_package_info, read_updater_status, request_update_check
@@ -18,16 +19,18 @@ class ChatGPTController:
         runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
         popen: Callable[..., object] = subprocess.Popen,
         process_finder: Callable[[], list[AppProcess]] = find_app_processes,
+        installation_selector: Callable[[], Installation | None] = select_installation,
         contract_checker: Callable[[Path], VoiceContract] = check_voice_contract,
         environment_builder: Callable[..., dict[str, str]] = graphical_environment,
         sleep: Callable[[float], None] = time.sleep,
         launch_attempts: int = 120,
-        app_asar: Path = Path("/opt/codex-desktop/resources/app.asar"),
+        app_asar: Path | None = None,
         uid: int | None = None,
     ) -> None:
         self._runner = runner
         self._popen = popen
         self._process_finder = process_finder
+        self._installation_selector = installation_selector
         self._contract_checker = contract_checker
         self._environment_builder = environment_builder
         self._sleep = sleep
@@ -36,15 +39,48 @@ class ChatGPTController:
         self._uid = os.getuid() if uid is None else uid
 
     def status(self) -> dict[str, object]:
-        package = read_package_info(self._runner)
-        contract = self._contract_checker(self._app_asar)
+        installation = self._installation_selector()
+        if installation is None:
+            return {
+                "installed": False,
+                "version": None,
+                "running": False,
+                "voiceCompatible": False,
+                "voiceMessage": "ChatGPT Community is not installed",
+                "updater": None,
+                "installationMode": None,
+                "launch": None,
+            }
+        processes = self._process_finder(installation)
+        if installation.mode == "native":
+            package = read_package_info(
+                self._runner,
+                app_executable=installation.app_executable,
+                metadata_path=installation.metadata_path,
+            )
+            updater = read_updater_status(self._runner)
+        else:
+            package = None
+            updater = None
+        app_asar = self._contract_path(installation, processes)
+        contract = (
+            self._contract_checker(app_asar)
+            if app_asar is not None
+            else VoiceContract(
+                False,
+                (),
+                "Start the AppImage once to verify Voice Mode compatibility",
+            )
+        )
         return {
-            "installed": package.installed,
-            "version": package.version,
-            "running": bool(self._process_finder()),
+            "installed": True if package is None else package.installed,
+            "version": installation.installed_version() if package is None else package.version,
+            "running": bool(processes),
             "voiceCompatible": contract.compatible,
             "voiceMessage": contract.message,
-            "updater": read_updater_status(self._runner),
+            "updater": updater,
+            "installationMode": installation.mode,
+            "launch": installation.launch_dict(),
         }
 
     def open_app(self) -> OperationResult:
@@ -57,7 +93,14 @@ class ChatGPTController:
         return OperationResult(True, "ChatGPT Community is open")
 
     def toggle_voice(self) -> OperationResult:
-        contract = self._contract_checker(self._app_asar)
+        installation = self._installation_selector()
+        if installation is None:
+            return OperationResult(False, "ChatGPT Community is not installed")
+        processes = self._process_finder(installation)
+        app_asar = self._contract_path(installation, processes)
+        if app_asar is None:
+            return OperationResult(False, "Could not locate the running AppImage bundle")
+        contract = self._contract_checker(app_asar)
         if not contract.compatible:
             return OperationResult(False, contract.message)
         return self._send_shortcut("ctrl+shift+v", "Voice Mode toggled")
@@ -66,7 +109,23 @@ class ChatGPTController:
         return self._send_shortcut("ctrl+n", "New ChatGPT conversation opened")
 
     def check_updates(self) -> OperationResult:
-        return request_update_check(self._runner)
+        installation = self._installation_selector()
+        if installation is None:
+            return OperationResult(False, "ChatGPT Community is not installed")
+        return request_update_check(installation, self._runner)
+
+    def _contract_path(
+        self, installation: Installation, processes: list[AppProcess]
+    ) -> Path | None:
+        if self._app_asar is not None:
+            return self._app_asar
+        if installation.mode == "native":
+            return installation.app_asar
+        for process in processes:
+            app_asar = installation.runtime_asar(process.executable)
+            if app_asar is not None:
+                return app_asar
+        return None
 
     def _send_shortcut(self, shortcut: str, message: str) -> OperationResult:
         window = self._ensure_window()
@@ -85,9 +144,12 @@ class ChatGPTController:
         return OperationResult(True, message)
 
     def _ensure_window(self) -> tuple[dict[str, str], str] | OperationResult:
+        installation = self._installation_selector()
+        if installation is None:
+            return OperationResult(False, "ChatGPT Community is not installed")
         saw_process = False
         for attempt in range(self._launch_attempts):
-            processes = self._process_finder()
+            processes = self._process_finder(installation)
             saw_process = saw_process or bool(processes)
             for process in processes:
                 primary_environment = self._environment_builder(
@@ -99,7 +161,7 @@ class ChatGPTController:
                     primary_environment,
                     discover=not bool(process.environment.get("DISPLAY")),
                 ):
-                    window_id = self._largest_window(environment)
+                    window_id = self._largest_window(environment, installation.window_class)
                     if window_id is not None:
                         return environment, window_id
             if attempt + 1 < self._launch_attempts:
@@ -138,9 +200,11 @@ class ChatGPTController:
             seen.add(display)
         return environments
 
-    def _largest_window(self, environment: dict[str, str]) -> str | None:
+    def _largest_window(
+        self, environment: dict[str, str], window_class: str
+    ) -> str | None:
         result = self._xdotool(
-            ("search", "--onlyvisible", "--class", "^codex-desktop$"),
+            ("search", "--onlyvisible", "--class", f"^{window_class}$"),
             environment,
         )
         if result is None or result.returncode != 0:

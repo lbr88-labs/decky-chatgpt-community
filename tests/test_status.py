@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from backend.installations import Installation
 from backend.status import read_package_info, read_updater_status, request_update_check
 
 
@@ -112,11 +113,27 @@ class StatusTests(unittest.TestCase):
             {command: subprocess.CompletedProcess([], 2, "", "network unavailable")}
         )
 
-        result = request_update_check(runner)
+        result = request_update_check(Installation.native(), runner)
 
         self.assertFalse(result.ok)
         self.assertIn("network unavailable", result.message)
         self.assertEqual(runner.calls[0][0], command)
+
+    def test_appimage_update_check_never_calls_disabled_native_updater(self):
+        class RejectingRunner:
+            def __call__(self, *_args, **_kwargs):
+                raise AssertionError("native updater must not run for AppImage")
+
+        result = request_update_check(
+            Installation.appimage(
+                Path("/home/deck/.local/share/chatgpt-community-appimage"),
+                Path("/home/deck/.cache/chatgpt-runtime"),
+            ),
+            RejectingRunner(),
+        )
+
+        self.assertTrue(result.ok)
+        self.assertIn("installer", result.message.lower())
 
 
 if __name__ == "__main__":

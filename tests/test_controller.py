@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from backend.compatibility import VoiceContract
 from backend.controller import ChatGPTController
+from backend.installations import Installation
 from backend.processes import AppProcess
 
 
@@ -66,10 +67,13 @@ class ControllerTests(unittest.TestCase):
         contract=None,
         popen=None,
         environment_builder=None,
+        installation=None,
     ):
+        selected = installation or Installation.native()
         return ChatGPTController(
             runner=runner or XdotoolRunner(),
-            process_finder=lambda: [self.process] if processes is None else processes(),
+            installation_selector=lambda: selected,
+            process_finder=lambda _installation: [self.process] if processes is None else processes(),
             contract_checker=lambda _: contract
             or VoiceContract(True, (), "Realtime Voice Mode is compatible"),
             popen=popen or FakePopen(),
@@ -205,7 +209,8 @@ class ControllerTests(unittest.TestCase):
 
         controller = ChatGPTController(
             runner=runner,
-            process_finder=lambda: [masked_process],
+            installation_selector=Installation.native,
+            process_finder=lambda _installation: [masked_process],
             contract_checker=lambda _: VoiceContract(True, (), "compatible"),
             environment_builder=environment_builder,
             app_asar=Path("/fake/app.asar"),
@@ -223,7 +228,8 @@ class ControllerTests(unittest.TestCase):
         masked_process = AppProcess(88, "/opt/codex-desktop/ChatGPT", {})
         controller = ChatGPTController(
             runner=runner,
-            process_finder=lambda: [masked_process],
+            installation_selector=Installation.native,
+            process_finder=lambda _installation: [masked_process],
             contract_checker=lambda _: VoiceContract(True, (), "compatible"),
             environment_builder=lambda *_args, **_kwargs: {"DISPLAY": ":0"},
             app_asar=Path("/fake/app.asar"),
@@ -244,6 +250,73 @@ class ControllerTests(unittest.TestCase):
             if "key" in call
         ]
         self.assertEqual(key_environments[0]["DISPLAY"], ":1")
+
+    def test_appimage_voice_uses_runtime_asar_and_appimage_window_class(self):
+        executable = (
+            "/home/deck/.cache/chatgpt-runtime/run.A1b2/"
+            "appimage_extracted_deadbeef/opt/codex-desktop/ChatGPT"
+        )
+        process = AppProcess(99, executable, {"DISPLAY": ":8"})
+        runner = XdotoolRunner(windows=("20",))
+        checked = []
+        installation = Installation.appimage(
+            Path("/home/deck/.local/share/chatgpt-community-appimage"),
+            Path("/home/deck/.cache/chatgpt-runtime"),
+        )
+        controller = ChatGPTController(
+            runner=runner,
+            installation_selector=lambda: installation,
+            process_finder=lambda _installation: [process],
+            contract_checker=lambda path: checked.append(path)
+            or VoiceContract(True, (), "compatible"),
+            environment_builder=lambda *_args, **_kwargs: {"DISPLAY": ":8"},
+            uid=1000,
+        )
+
+        result = controller.toggle_voice()
+
+        self.assertTrue(result.ok)
+        self.assertEqual(
+            checked,
+            [Path(executable).parent / "resources/app.asar"],
+        )
+        self.assertIn(
+            (
+                "/usr/bin/xdotool",
+                "search",
+                "--onlyvisible",
+                "--class",
+                "^chatgpt-community-appimage$",
+            ),
+            runner.calls,
+        )
+
+    def test_status_exposes_selected_launch_configuration(self):
+        installation = Installation.appimage(
+            Path("/home/deck/.local/share/chatgpt-community-appimage"),
+            Path("/home/deck/.cache/chatgpt-runtime"),
+        )
+        controller = ChatGPTController(
+            runner=XdotoolRunner(),
+            installation_selector=lambda: installation,
+            process_finder=lambda _installation: [],
+            uid=1000,
+        )
+
+        status = controller.status()
+
+        self.assertTrue(status["installed"])
+        self.assertEqual(status["installationMode"], "appimage")
+        self.assertEqual(
+            status["launch"],
+            {
+                "executable": "/home/deck/.local/share/chatgpt-community-appimage/launch-appimage.sh",
+                "startDirectory": "/home/deck/.local/share/chatgpt-community-appimage",
+                "launchOptions": 'LD_PRELOAD="" %command%',
+            },
+        )
+        self.assertFalse(status["voiceCompatible"])
+        self.assertIn("start", status["voiceMessage"].lower())
 
 
 if __name__ == "__main__":
