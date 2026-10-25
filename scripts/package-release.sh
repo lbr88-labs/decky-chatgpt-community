@@ -37,6 +37,8 @@ install -m 0644 "${repo_root}/assets/logo.svg" "${plugin_root}/assets/logo.svg"
 for module in __init__ compatibility controller desktop installations models processes status; do
     install -m 0644 "${repo_root}/backend/${module}.py" "${plugin_root}/backend/${module}.py"
 done
+install -m 0644 "${repo_root}/backend/sessions.py" "${plugin_root}/backend/sessions.py"
+install -m 0644 "${repo_root}/backend/voice_controls.mjs" "${plugin_root}/backend/voice_controls.mjs"
 
 (cd "${stage_root}" && python -m zipfile -c "${archive}" decky-chatgpt-community)
 install -m 0644 "${archive}" "${stable_archive}"

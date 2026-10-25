@@ -7,6 +7,7 @@ from backend.compatibility import VoiceContract
 from backend.controller import ChatGPTController
 from backend.installations import Installation
 from backend.processes import AppProcess
+from backend.sessions import RecentSession, SessionPage
 
 
 class XdotoolRunner:
@@ -39,6 +40,8 @@ class XdotoolRunner:
             return subprocess.CompletedProcess(args, 0, "WIDTH=100\nHEIGHT=100\n", "")
         if command == ("/usr/bin/xdotool", "getwindowgeometry", "--shell", "20"):
             return subprocess.CompletedProcess(args, 0, "WIDTH=640\nHEIGHT=480\n", "")
+        if command[:2] == ("/usr/bin/node", str(Path(__file__).parents[1] / "backend" / "voice_controls.mjs")):
+            return subprocess.CompletedProcess(args, 0, '{"ok":true,"message":"updated"}\n', "")
         return subprocess.CompletedProcess(args, 0, "", "")
 
 
@@ -68,6 +71,7 @@ class ControllerTests(unittest.TestCase):
         popen=None,
         environment_builder=None,
         installation=None,
+        sessions=None,
     ):
         selected = installation or Installation.native()
         return ChatGPTController(
@@ -81,12 +85,49 @@ class ControllerTests(unittest.TestCase):
             launch_attempts=2,
             app_asar=Path("/fake/app.asar"),
             uid=1000,
+            session_client=sessions,
             **(
                 {"environment_builder": environment_builder}
                 if environment_builder is not None
                 else {}
             ),
         )
+
+    def test_recent_chats_are_serialized_without_thread_ids(self):
+        class Sessions:
+            def list_recent(self, cursor=None):
+                self.cursor = cursor
+                return SessionPage((RecentSession("safe", "secret", "Chat", 42),), "next")
+
+        sessions = Sessions()
+        result = self._controller(sessions=sessions).list_recent_chats("page")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(sessions.cursor, "page")
+        self.assertNotIn("secret", repr(result))
+        self.assertEqual(result["items"][0]["selectionToken"], "safe")
+
+    def test_open_recent_chat_uses_resolved_deep_link(self):
+        class Sessions:
+            def resolve(self, token):
+                return RecentSession(token, "thread-123", "Chat", 42) if token == "safe" else None
+
+        runner = XdotoolRunner(windows=("20",))
+        result = self._controller(runner=runner, sessions=Sessions()).open_recent_chat("safe")
+
+        self.assertTrue(result.ok)
+        self.assertIn(("/usr/bin/xdg-open", "codex://threads/thread-123"), runner.calls)
+
+    def test_open_recent_chat_rejects_stale_token_without_deep_link(self):
+        class Sessions:
+            def resolve(self, _token):
+                return None
+
+        runner = XdotoolRunner(windows=("20",))
+        result = self._controller(runner=runner, sessions=Sessions()).open_recent_chat("stale")
+
+        self.assertFalse(result.ok)
+        self.assertFalse(any("xdg-open" in call for call in runner.calls))
 
     def test_voice_fails_closed_before_input_when_contract_is_missing(self):
         runner = XdotoolRunner()
@@ -340,12 +381,36 @@ class ControllerTests(unittest.TestCase):
             {
                 "executable": "/home/deck/.local/share/chatgpt-community-appimage/launch-appimage.sh",
                 "startDirectory": "/home/deck/.local/share/chatgpt-community-appimage",
-                "launchOptions": 'LD_PRELOAD="" %command%',
+                "launchOptions": (
+                    'LD_PRELOAD="" %command% '
+                    '--remote-debugging-address=127.0.0.1 --remote-debugging-port=9223'
+                ),
             },
         )
         self.assertFalse(status["voiceCompatible"])
         self.assertEqual(status["voiceState"], "pending")
         self.assertIn("start", status["voiceMessage"].lower())
+
+    def test_explicit_voice_controls_use_only_the_app_control_helper(self):
+        runner = XdotoolRunner(windows=("20",))
+        controller = self._controller(runner=runner)
+
+        results = [
+            controller.mute_microphone(),
+            controller.unmute_microphone(),
+            controller.mute_speaker(),
+            controller.unmute_speaker(),
+        ]
+
+        self.assertTrue(all(result.ok for result in results))
+        helper_calls = [call for call in runner.calls if call[:1] == ("/usr/bin/node",)]
+        self.assertEqual([call[-1] for call in helper_calls], [
+            "mute-microphone",
+            "unmute-microphone",
+            "mute-speaker",
+            "unmute-speaker",
+        ])
+        self.assertFalse(any(call[0] in {"pactl", "wpctl", "amixer"} for call in runner.calls))
 
 
 if __name__ == "__main__":

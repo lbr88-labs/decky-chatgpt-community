@@ -115,6 +115,8 @@ class ReleaseScriptTests(unittest.TestCase):
             f"{prefix}main.py",
             f"{prefix}backend/controller.py",
             f"{prefix}backend/installations.py",
+            f"{prefix}backend/sessions.py",
+            f"{prefix}backend/voice_controls.mjs",
             f"{prefix}plugin.json",
             f"{prefix}package.json",
             f"{prefix}README.md",

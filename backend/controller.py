@@ -1,4 +1,5 @@
 import os
+import json
 import subprocess
 import time
 from collections.abc import Callable
@@ -10,6 +11,7 @@ from .installations import Installation, select_installation
 from .models import OperationResult
 from .processes import AppProcess, find_app_processes
 from .status import read_package_info, read_updater_status, request_update_check
+from .sessions import CodexSessionClient, SessionProtocolError
 
 
 class ChatGPTController:
@@ -26,6 +28,7 @@ class ChatGPTController:
         launch_attempts: int = 120,
         app_asar: Path | None = None,
         uid: int | None = None,
+        session_client: CodexSessionClient | None = None,
     ) -> None:
         self._runner = runner
         self._popen = popen
@@ -37,6 +40,7 @@ class ChatGPTController:
         self._launch_attempts = launch_attempts
         self._app_asar = app_asar
         self._uid = os.getuid() if uid is None else uid
+        self._sessions = session_client or CodexSessionClient()
 
     def status(self) -> dict[str, object]:
         installation = self._installation_selector()
@@ -122,6 +126,80 @@ class ChatGPTController:
 
     def new_chat(self) -> OperationResult:
         return self._send_shortcut("ctrl+n", "New ChatGPT conversation opened")
+
+    def list_recent_chats(self, cursor: str | None = None) -> dict[str, object]:
+        try:
+            return {"ok": True, **self._sessions.list_recent(cursor).to_dict()}
+        except SessionProtocolError as error:
+            return {"ok": False, "message": str(error), "items": [], "nextCursor": None}
+
+    def open_recent_chat(self, selection_token: str) -> OperationResult:
+        session = self._sessions.resolve(selection_token)
+        if session is None:
+            return OperationResult(False, "That recent chat is no longer available; refresh the list")
+        window = self._ensure_window()
+        if isinstance(window, OperationResult):
+            return window
+        environment, _window_id = window
+        try:
+            result = self._runner(
+                ("/usr/bin/xdg-open", f"codex://threads/{session.thread_id}"),
+                env=environment,
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return OperationResult(False, "Could not open the selected chat")
+        if result.returncode != 0:
+            return OperationResult(False, "Could not open the selected chat")
+        return OperationResult(True, f"Opened {session.title}")
+
+    def open_recent_chat_with_voice(self, selection_token: str) -> OperationResult:
+        opened = self.open_recent_chat(selection_token)
+        if not opened.ok:
+            return opened
+        self._sleep(0.75)
+        voice = self.toggle_voice()
+        if not voice.ok:
+            return voice
+        return OperationResult(True, "Opened the selected chat and started Voice Mode")
+
+    def mute_microphone(self) -> OperationResult:
+        return self._set_voice_control("mute-microphone")
+
+    def unmute_microphone(self) -> OperationResult:
+        return self._set_voice_control("unmute-microphone")
+
+    def mute_speaker(self) -> OperationResult:
+        return self._set_voice_control("mute-speaker")
+
+    def unmute_speaker(self) -> OperationResult:
+        return self._set_voice_control("unmute-speaker")
+
+    def _set_voice_control(self, action: str) -> OperationResult:
+        window = self._ensure_window()
+        if isinstance(window, OperationResult):
+            return window
+        environment, window_id = window
+        focused = self._focus(environment, window_id)
+        if not focused.ok:
+            return focused
+        helper = Path(__file__).with_name("voice_controls.mjs")
+        try:
+            result = self._runner(
+                ("/usr/bin/node", str(helper), action),
+                env=environment,
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+            payload = json.loads(result.stdout)
+        except (OSError, subprocess.SubprocessError, json.JSONDecodeError):
+            return OperationResult(False, "ChatGPT voice controls are unavailable; reopen the app through Decky")
+        return OperationResult(bool(payload.get("ok")), str(payload.get("message") or "Voice control failed"))
 
     def check_updates(self) -> OperationResult:
         installation = self._installation_selector()

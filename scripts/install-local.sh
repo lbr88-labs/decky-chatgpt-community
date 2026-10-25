@@ -34,6 +34,8 @@ install -m 0644 "${repo_root}/assets/logo.svg" "${target}/assets/logo.svg"
 for module in __init__ compatibility controller desktop installations models processes status; do
     install -m 0644 "${repo_root}/backend/${module}.py" "${target}/backend/${module}.py"
 done
+install -m 0644 "${repo_root}/backend/sessions.py" "${target}/backend/sessions.py"
+install -m 0644 "${repo_root}/backend/voice_controls.mjs" "${target}/backend/voice_controls.mjs"
 
 echo "Installed ChatGPT Community for Decky at ${target}"
 echo "Restart Decky Loader or reboot the Steam Deck to load it."

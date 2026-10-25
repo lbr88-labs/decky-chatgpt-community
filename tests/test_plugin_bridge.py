@@ -32,6 +32,27 @@ class ControllerStub:
     def check_updates(self):
         return OperationResult(False, "offline")
 
+    def list_recent_chats(self, cursor=None):
+        return {"ok": True, "items": [], "nextCursor": cursor}
+
+    def open_recent_chat(self, token):
+        return OperationResult(True, f"open {token}")
+
+    def open_recent_chat_with_voice(self, token):
+        return OperationResult(True, f"voice {token}")
+
+    def mute_microphone(self):
+        return OperationResult(True, "mic muted")
+
+    def unmute_microphone(self):
+        return OperationResult(True, "mic unmuted")
+
+    def mute_speaker(self):
+        return OperationResult(True, "speaker muted")
+
+    def unmute_speaker(self):
+        return OperationResult(True, "speaker unmuted")
+
 
 class PluginBridgeTests(unittest.TestCase):
     def _load_plugin(self):
@@ -63,6 +84,13 @@ class PluginBridgeTests(unittest.TestCase):
                 "voice": await plugin.toggle_voice(),
                 "chat": await plugin.new_chat(),
                 "updates": await plugin.check_updates(),
+                "recent": await plugin.list_recent_chats("page"),
+                "open_recent": await plugin.open_recent_chat("pick"),
+                "voice_recent": await plugin.open_recent_chat_with_voice("pick"),
+                "mute_mic": await plugin.mute_microphone(),
+                "unmute_mic": await plugin.unmute_microphone(),
+                "mute_speaker": await plugin.mute_speaker(),
+                "unmute_speaker": await plugin.unmute_speaker(),
             }
 
         result = asyncio.run(exercise())
@@ -72,6 +100,11 @@ class PluginBridgeTests(unittest.TestCase):
         self.assertEqual(result["voice"], {"ok": True, "message": "voice"})
         self.assertEqual(result["chat"], {"ok": True, "message": "new chat"})
         self.assertEqual(result["updates"], {"ok": False, "message": "offline"})
+        self.assertEqual(result["recent"]["nextCursor"], "page")
+        self.assertTrue(result["open_recent"]["ok"])
+        self.assertTrue(result["voice_recent"]["ok"])
+        self.assertEqual(result["mute_mic"]["message"], "mic muted")
+        self.assertEqual(result["unmute_speaker"]["message"], "speaker unmuted")
 
 
 if __name__ == "__main__":
