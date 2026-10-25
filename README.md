@@ -19,7 +19,7 @@ integration can be installed or updated independently.
 
 ## Current status
 
-Version 0.2.0 supports both ChatGPT Community installation methods. When both
+Version 0.2.1 supports both ChatGPT Community installation methods. When both
 are present, the plugin uses the user-owned AppImage; otherwise it keeps using
 the native `codex-desktop` package exactly as before.
 

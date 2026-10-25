@@ -1,14 +1,34 @@
 import json
+import os
 import secrets
 import select
 import subprocess
 import time
 from dataclasses import dataclass
 from typing import Callable
+from pathlib import Path
 
 
 class SessionProtocolError(RuntimeError):
     pass
+
+
+def _codex_binary(
+    runtime_root: Path = Path("/home/deck/.cache/chatgpt-runtime"),
+    native: Path = Path("/opt/codex-desktop/resources/codex"),
+    standalone: Path = Path("/home/deck/.local/bin/codex"),
+) -> Path:
+    appimage_candidates = sorted(
+        runtime_root.glob(
+            "run.*/appimage_extracted_*/opt/codex-desktop/resources/codex"
+        ),
+        key=lambda path: path.stat().st_mtime if path.exists() else 0,
+        reverse=True,
+    )
+    for candidate in (*appimage_candidates, native, standalone):
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return candidate
+    raise SessionProtocolError("Start ChatGPT Community once, then refresh recent chats")
 
 
 @dataclass(frozen=True)
@@ -39,14 +59,18 @@ class SessionPage:
 
 
 def _stdio_request(method: str, params: dict[str, object]) -> dict[str, object]:
-    process = subprocess.Popen(
-        ["codex", "app-server"],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
-        text=True,
-        bufsize=1,
-    )
+    codex_binary = _codex_binary()
+    try:
+        process = subprocess.Popen(
+            [str(codex_binary), "app-server"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            bufsize=1,
+        )
+    except OSError as error:
+        raise SessionProtocolError("Could not start the local session service") from error
     if process.stdin is None or process.stdout is None:
         raise SessionProtocolError("Could not start the local session service")
     messages = (
