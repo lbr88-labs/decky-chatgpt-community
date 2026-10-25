@@ -1,8 +1,5 @@
 export const CHATGPT_SHORTCUT_NAME = "ChatGPT Community";
 
-const CHATGPT_EXECUTABLE = "/usr/bin/codex-desktop";
-const CHATGPT_START_DIRECTORY = "/opt/codex-desktop";
-const CHATGPT_LAUNCH_OPTIONS = 'LD_PRELOAD="" %command%';
 const SHORTCUT_STORAGE_KEY = "decky-chatgpt-community:steam-shortcut-app-id";
 const GAMEPAD_UI_LAUNCH_SOURCE = 100;
 
@@ -42,7 +39,7 @@ function existingShortcutAppId(appStore) {
   return normalizedAppId(overview?.appid);
 }
 
-async function ensureShortcut({ apps, appStore, storage }) {
+async function ensureShortcut({ apps, appStore, storage }, launch) {
   let appId = recalledAppId(storage) ?? existingShortcutAppId(appStore);
   let created = false;
 
@@ -50,9 +47,9 @@ async function ensureShortcut({ apps, appStore, storage }) {
     appId = normalizedAppId(
       await apps.AddShortcut(
         CHATGPT_SHORTCUT_NAME,
-        CHATGPT_EXECUTABLE,
-        CHATGPT_START_DIRECTORY,
-        CHATGPT_LAUNCH_OPTIONS,
+        launch.executable,
+        launch.startDirectory,
+        launch.launchOptions,
       ),
     );
     if (appId === null) {
@@ -62,15 +59,15 @@ async function ensureShortcut({ apps, appStore, storage }) {
   }
 
   apps.SetShortcutName(appId, CHATGPT_SHORTCUT_NAME);
-  apps.SetShortcutExe(appId, CHATGPT_EXECUTABLE);
-  apps.SetShortcutStartDir(appId, CHATGPT_START_DIRECTORY);
-  apps.SetAppLaunchOptions(appId, CHATGPT_LAUNCH_OPTIONS);
+  apps.SetShortcutExe(appId, launch.executable);
+  apps.SetShortcutStartDir(appId, launch.startDirectory);
+  apps.SetAppLaunchOptions(appId, launch.launchOptions);
   rememberAppId(storage, appId);
   return { appId, created };
 }
 
-export async function launchChatGPT(dependencies) {
-  const result = await ensureShortcut(dependencies);
+export async function launchChatGPT(dependencies, launch) {
+  const result = await ensureShortcut(dependencies, launch);
   const running = dependencies.steamUiStore.RunningApps?.some(
     (app) => normalizedAppId(app.appid) === result.appId,
   );
@@ -87,11 +84,11 @@ export async function launchChatGPT(dependencies) {
   return { ...result, running: Boolean(running) };
 }
 
-export async function runWithChatGPTForeground(dependencies, operation) {
+export async function runWithChatGPTForeground(dependencies, launch, operation) {
   const previousAppId = normalizedAppId(
     dependencies.steamUiStore.MainRunningAppID,
   );
-  const { appId } = await launchChatGPT(dependencies);
+  const { appId } = await launchChatGPT(dependencies, launch);
 
   try {
     return await operation();

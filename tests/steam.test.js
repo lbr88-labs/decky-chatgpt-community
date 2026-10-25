@@ -8,6 +8,19 @@ import {
   runWithChatGPTForeground,
 } from "../src/steam.js";
 
+const NATIVE_LAUNCH = {
+  executable: "/usr/bin/codex-desktop",
+  startDirectory: "/opt/codex-desktop",
+  launchOptions: 'LD_PRELOAD="" %command%',
+};
+
+const APPIMAGE_LAUNCH = {
+  executable:
+    "/home/deck/.local/share/chatgpt-community-appimage/launch-appimage.sh",
+  startDirectory: "/home/deck/.local/share/chatgpt-community-appimage",
+  launchOptions: 'LD_PRELOAD="" %command%',
+};
+
 class MemoryStorage {
   constructor() {
     this.values = new Map();
@@ -80,8 +93,8 @@ function fixture() {
 test("launchChatGPT creates one Steam shortcut and launches its non-Steam game ID", async () => {
   const { dependencies, calls } = fixture();
 
-  const first = await launchChatGPT(dependencies);
-  const second = await launchChatGPT(dependencies);
+  const first = await launchChatGPT(dependencies, NATIVE_LAUNCH);
+  const second = await launchChatGPT(dependencies, NATIVE_LAUNCH);
 
   assert.equal(first.appId, 0x81234567);
   assert.equal(first.created, true);
@@ -126,7 +139,7 @@ test("launchChatGPT focuses a running shortcut without launching it again", asyn
   );
   dependencies.steamUiStore.RunningApps = [{ appid: 0x81234567 }];
 
-  const result = await launchChatGPT(dependencies);
+  const result = await launchChatGPT(dependencies, NATIVE_LAUNCH);
 
   assert.equal(result.appId, 0x81234567);
   assert.equal(result.running, true);
@@ -141,7 +154,7 @@ test("runWithChatGPTForeground restores the game after the voice command", async
   const { dependencies, calls } = fixture();
   const events = [];
 
-  const result = await runWithChatGPTForeground(dependencies, async () => {
+  const result = await runWithChatGPTForeground(dependencies, NATIVE_LAUNCH, async () => {
     events.push("voice");
     return { ok: true, message: "Voice Mode toggled" };
   });
@@ -170,7 +183,7 @@ test("runWithChatGPTForeground restores the game when the command fails", async 
   const { dependencies, calls } = fixture();
 
   await assert.rejects(
-    runWithChatGPTForeground(dependencies, async () => {
+    runWithChatGPTForeground(dependencies, NATIVE_LAUNCH, async () => {
       throw new Error("voice failed");
     }),
     /voice failed/,
@@ -182,5 +195,29 @@ test("runWithChatGPTForeground restores the game when the command fails", async 
   );
   assert.ok(
     calls.some((call) => call[0] === "SetRunningApp" && call[1] === 570),
+  );
+});
+
+test("launchChatGPT rewrites an existing shortcut for the selected AppImage", async () => {
+  const { dependencies, calls } = fixture();
+  dependencies.appStore.allApps = [
+    { appid: 0x81234567, display_name: CHATGPT_SHORTCUT_NAME },
+  ];
+
+  const result = await launchChatGPT(dependencies, APPIMAGE_LAUNCH);
+
+  assert.equal(result.created, false);
+  assert.equal(calls.some(([name]) => name === "AddShortcut"), false);
+  assert.deepEqual(
+    calls.find(([name]) => name === "SetShortcutExe"),
+    ["SetShortcutExe", 0x81234567, APPIMAGE_LAUNCH.executable],
+  );
+  assert.deepEqual(
+    calls.find(([name]) => name === "SetShortcutStartDir"),
+    ["SetShortcutStartDir", 0x81234567, APPIMAGE_LAUNCH.startDirectory],
+  );
+  assert.deepEqual(
+    calls.find(([name]) => name === "SetAppLaunchOptions"),
+    ["SetAppLaunchOptions", 0x81234567, APPIMAGE_LAUNCH.launchOptions],
   );
 });

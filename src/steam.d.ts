@@ -40,13 +40,21 @@ export type SteamDependencies = {
   storage: Storage;
 };
 
+export type ChatGPTLaunch = {
+  executable: string;
+  startDirectory: string;
+  launchOptions: string;
+};
+
 export function gameIdFromAppId(appId: number): string;
 
 export function launchChatGPT(
   dependencies: SteamDependencies,
+  launch: ChatGPTLaunch,
 ): Promise<{ appId: number; created: boolean; running: boolean }>;
 
 export function runWithChatGPTForeground<T>(
   dependencies: SteamDependencies,
+  launch: ChatGPTLaunch,
   operation: () => Promise<T>,
 ): Promise<T>;

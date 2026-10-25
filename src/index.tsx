@@ -13,6 +13,7 @@ import {
   runWithChatGPTForeground,
   type SteamAppStore,
   type SteamApps,
+  type ChatGPTLaunch,
   type SteamDependencies,
   type SteamNavigation,
 } from "./steam.js";
@@ -26,6 +27,8 @@ type PluginStatus = {
   voiceCompatible: boolean;
   voiceMessage: string;
   updater: Record<string, unknown> | null;
+  installationMode: "appimage" | "native" | null;
+  launch: ChatGPTLaunch | null;
 };
 
 type OperationResult = {
@@ -91,6 +94,8 @@ function Content() {
 
   const installed = status?.installed === true;
   const compatible = status?.voiceCompatible === true;
+  const appImageCanVerifyAfterLaunch = status?.installationMode === "appimage";
+  const launch = status?.launch ?? null;
   const version = status?.version ?? "not installed";
 
   return (
@@ -114,6 +119,8 @@ function Content() {
                 ? "Checking…"
                 : compatible
                   ? "Ready"
+                  : appImageCanVerifyAfterLaunch
+                    ? "Ready after launch"
                   : "Unavailable"}
             </div>
             {status !== null && !compatible ? (
@@ -134,12 +141,12 @@ function Content() {
         <PanelSectionRow>
           <ButtonItem
             layout="below"
-            disabled={busy || !installed}
+            disabled={busy || !installed || launch === null}
             onClick={() =>
               void runOperation(
                 "Open ChatGPT",
                 async () => {
-                  const result = await launchChatGPT(steamDependencies());
+                  const result = await launchChatGPT(steamDependencies(), launch!);
                   return {
                     ok: true,
                     message: result.created
@@ -157,13 +164,19 @@ function Content() {
         <PanelSectionRow>
           <ButtonItem
             layout="below"
-            disabled={busy || !installed || !compatible}
+            disabled={
+              busy ||
+              !installed ||
+              launch === null ||
+              (!compatible && !appImageCanVerifyAfterLaunch)
+            }
             onClick={() =>
               void runOperation(
                 "ChatGPT Voice Mode",
                 () =>
                   runWithChatGPTForeground(
                     steamDependencies(),
+                    launch!,
                     toggleVoice,
                   ),
                 true,
