@@ -221,3 +221,41 @@ test("launchChatGPT rewrites an existing shortcut for the selected AppImage", as
     ["SetAppLaunchOptions", 0x81234567, APPIMAGE_LAUNCH.launchOptions],
   );
 });
+
+test("launchChatGPT creates a separate AppImage shortcut while native is still running", async () => {
+  const { dependencies, calls } = fixture();
+  const oldAppId = 0x81234567;
+  const newAppId = 0x82345678;
+  dependencies.storage.setItem(
+    "decky-chatgpt-community:steam-shortcut-app-id",
+    String(oldAppId),
+  );
+  dependencies.storage.setItem(
+    "decky-chatgpt-community:steam-shortcut-executable",
+    NATIVE_LAUNCH.executable,
+  );
+  dependencies.steamUiStore.RunningApps = [{ appid: oldAppId }];
+  dependencies.apps.AddShortcut = async (...args) => {
+    calls.push(["AddShortcut", ...args]);
+    return newAppId;
+  };
+
+  const result = await launchChatGPT(dependencies, APPIMAGE_LAUNCH);
+
+  assert.equal(result.appId, newAppId);
+  assert.equal(result.running, false);
+  assert.deepEqual(calls.find(([name]) => name === "AddShortcut"), [
+    "AddShortcut",
+    CHATGPT_SHORTCUT_NAME,
+    APPIMAGE_LAUNCH.executable,
+    APPIMAGE_LAUNCH.startDirectory,
+    APPIMAGE_LAUNCH.launchOptions,
+  ]);
+  assert.deepEqual(calls.find(([name]) => name === "RunGame"), [
+    "RunGame",
+    gameIdFromAppId(newAppId),
+    "",
+    -1,
+    100,
+  ]);
+});

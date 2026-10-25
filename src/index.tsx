@@ -25,6 +25,7 @@ type PluginStatus = {
   version: string | null;
   running: boolean;
   voiceCompatible: boolean;
+  voiceState: "ready" | "pending" | "incompatible";
   voiceMessage: string;
   updater: Record<string, unknown> | null;
   installationMode: "appimage" | "native" | null;
@@ -94,7 +95,7 @@ function Content() {
 
   const installed = status?.installed === true;
   const compatible = status?.voiceCompatible === true;
-  const appImageCanVerifyAfterLaunch = status?.installationMode === "appimage";
+  const voicePending = status?.voiceState === "pending";
   const launch = status?.launch ?? null;
   const version = status?.version ?? "not installed";
 
@@ -119,7 +120,7 @@ function Content() {
                 ? "Checking…"
                 : compatible
                   ? "Ready"
-                  : appImageCanVerifyAfterLaunch
+                  : voicePending
                     ? "Ready after launch"
                   : "Unavailable"}
             </div>
@@ -168,7 +169,7 @@ function Content() {
               busy ||
               !installed ||
               launch === null ||
-              (!compatible && !appImageCanVerifyAfterLaunch)
+              (!compatible && !voicePending)
             }
             onClick={() =>
               void runOperation(

@@ -44,4 +44,3 @@ installer. The AppImage build metadata supplies the installed version.
 - Never send shortcuts to a window class that does not match the selected mode.
 - Keep fixed subprocess argument arrays and no frontend-controlled shell text.
 - Keep the local Decky installation flow constrained to its documented target.
-

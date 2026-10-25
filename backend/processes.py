@@ -61,6 +61,11 @@ def find_app_processes(
             executable = str((entry / "exe").readlink())
             cmdline = _nul_items(entry / "cmdline")
             is_app = selected.matches_executable(executable)
+            if selected.mode == "appimage" and any(
+                argument == "--type" or argument.startswith("--type=")
+                for argument in cmdline[1:]
+            ):
+                is_app = False
             is_launcher = (
                 selected.mode == "native"
                 and bool(cmdline)

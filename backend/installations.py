@@ -56,6 +56,8 @@ class Installation:
             metadata = json.loads(self.metadata_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             return None
+        if not isinstance(metadata, dict):
+            return None
         if self.mode == "appimage":
             package = metadata.get("upstreamLinuxPackage")
             version = package.get("version") if isinstance(package, dict) else None

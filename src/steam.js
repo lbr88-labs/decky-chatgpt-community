@@ -1,6 +1,8 @@
 export const CHATGPT_SHORTCUT_NAME = "ChatGPT Community";
 
 const SHORTCUT_STORAGE_KEY = "decky-chatgpt-community:steam-shortcut-app-id";
+const SHORTCUT_EXECUTABLE_STORAGE_KEY =
+  "decky-chatgpt-community:steam-shortcut-executable";
 const GAMEPAD_UI_LAUNCH_SOURCE = 100;
 
 function normalizedAppId(value) {
@@ -32,6 +34,22 @@ function rememberAppId(storage, appId) {
   }
 }
 
+function recalledExecutable(storage) {
+  try {
+    return storage.getItem(SHORTCUT_EXECUTABLE_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function rememberExecutable(storage, executable) {
+  try {
+    storage.setItem(SHORTCUT_EXECUTABLE_STORAGE_KEY, executable);
+  } catch {
+    // Steam can still launch the selected installation for this session.
+  }
+}
+
 function existingShortcutAppId(appStore) {
   const overview = appStore.allApps?.find(
     (app) => app.display_name === CHATGPT_SHORTCUT_NAME,
@@ -39,9 +57,19 @@ function existingShortcutAppId(appStore) {
   return normalizedAppId(overview?.appid);
 }
 
-async function ensureShortcut({ apps, appStore, storage }, launch) {
+async function ensureShortcut(
+  { apps, appStore, steamUiStore, storage },
+  launch,
+) {
   let appId = recalledAppId(storage) ?? existingShortcutAppId(appStore);
   let created = false;
+
+  const running = steamUiStore.RunningApps?.some(
+    (app) => normalizedAppId(app.appid) === appId,
+  );
+  if (running && recalledExecutable(storage) !== launch.executable) {
+    appId = null;
+  }
 
   if (appId === null) {
     appId = normalizedAppId(
@@ -63,6 +91,7 @@ async function ensureShortcut({ apps, appStore, storage }, launch) {
   apps.SetShortcutStartDir(appId, launch.startDirectory);
   apps.SetAppLaunchOptions(appId, launch.launchOptions);
   rememberAppId(storage, appId);
+  rememberExecutable(storage, launch.executable);
   return { appId, created };
 }
 

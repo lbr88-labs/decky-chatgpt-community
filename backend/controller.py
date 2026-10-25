@@ -46,6 +46,7 @@ class ChatGPTController:
                 "version": None,
                 "running": False,
                 "voiceCompatible": False,
+                "voiceState": "incompatible",
                 "voiceMessage": "ChatGPT Community is not installed",
                 "updater": None,
                 "installationMode": None,
@@ -72,11 +73,17 @@ class ChatGPTController:
                 "Start the AppImage once to verify Voice Mode compatibility",
             )
         )
+        voice_state = (
+            "pending"
+            if app_asar is None
+            else "ready" if contract.compatible else "incompatible"
+        )
         return {
             "installed": True if package is None else package.installed,
             "version": installation.installed_version() if package is None else package.version,
             "running": bool(processes),
             "voiceCompatible": contract.compatible,
+            "voiceState": voice_state,
             "voiceMessage": contract.message,
             "updater": updater,
             "installationMode": installation.mode,
@@ -96,14 +103,22 @@ class ChatGPTController:
         installation = self._installation_selector()
         if installation is None:
             return OperationResult(False, "ChatGPT Community is not installed")
-        processes = self._process_finder(installation)
+        processes: list[AppProcess] = []
+        for attempt in range(self._launch_attempts):
+            processes = self._process_finder(installation)
+            if self._contract_path(installation, processes) is not None:
+                break
+            if attempt + 1 < self._launch_attempts:
+                self._sleep(0.25)
         app_asar = self._contract_path(installation, processes)
         if app_asar is None:
             return OperationResult(False, "Could not locate the running AppImage bundle")
         contract = self._contract_checker(app_asar)
         if not contract.compatible:
             return OperationResult(False, contract.message)
-        return self._send_shortcut("ctrl+shift+v", "Voice Mode toggled")
+        return self._send_shortcut(
+            "ctrl+shift+v", "Voice Mode toggled", installation=installation
+        )
 
     def new_chat(self) -> OperationResult:
         return self._send_shortcut("ctrl+n", "New ChatGPT conversation opened")
@@ -127,8 +142,14 @@ class ChatGPTController:
                 return app_asar
         return None
 
-    def _send_shortcut(self, shortcut: str, message: str) -> OperationResult:
-        window = self._ensure_window()
+    def _send_shortcut(
+        self,
+        shortcut: str,
+        message: str,
+        *,
+        installation: Installation | None = None,
+    ) -> OperationResult:
+        window = self._ensure_window(installation)
         if isinstance(window, OperationResult):
             return window
         environment, window_id = window
@@ -143,8 +164,10 @@ class ChatGPTController:
             return OperationResult(False, "ChatGPT did not accept the keyboard command")
         return OperationResult(True, message)
 
-    def _ensure_window(self) -> tuple[dict[str, str], str] | OperationResult:
-        installation = self._installation_selector()
+    def _ensure_window(
+        self, installation: Installation | None = None
+    ) -> tuple[dict[str, str], str] | OperationResult:
+        installation = installation or self._installation_selector()
         if installation is None:
             return OperationResult(False, "ChatGPT Community is not installed")
         saw_process = False

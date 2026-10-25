@@ -132,4 +132,3 @@ compatibility behavior.
 Run: `pnpm test && pnpm run typecheck && pnpm run build && bash scripts/package-release.sh && git diff --check`
 
 Expected: all commands exit 0 and the release archive contains only its allowlist.
-

@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from backend.installations import select_installation
+from backend.installations import Installation, select_installation
 
 
 class InstallationSelectionTests(unittest.TestCase):
@@ -69,6 +69,15 @@ class InstallationSelectionTests(unittest.TestCase):
             version = selected.installed_version()
 
         self.assertEqual(version, "26.1021.22027")
+
+    def test_non_object_metadata_is_treated_as_unknown_version(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            metadata = root / "build-info.json"
+            metadata.write_text("[]", encoding="utf-8")
+            installation = Installation.appimage(root, root / "runtime")
+
+            self.assertIsNone(installation.installed_version())
 
 
 if __name__ == "__main__":

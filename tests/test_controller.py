@@ -291,6 +291,34 @@ class ControllerTests(unittest.TestCase):
             runner.calls,
         )
 
+    def test_appimage_voice_waits_for_runtime_before_checking_contract(self):
+        executable = (
+            "/home/deck/.cache/chatgpt-runtime/run.A1b2/"
+            "appimage_extracted_deadbeef/opt/codex-desktop/ChatGPT"
+        )
+        process = AppProcess(99, executable, {"DISPLAY": ":8"})
+        sightings = iter(([], [process], [process]))
+        checked = []
+        controller = ChatGPTController(
+            runner=XdotoolRunner(windows=("20",)),
+            installation_selector=lambda: Installation.appimage(
+                Path("/home/deck/.local/share/chatgpt-community-appimage"),
+                Path("/home/deck/.cache/chatgpt-runtime"),
+            ),
+            process_finder=lambda _installation: next(sightings, [process]),
+            contract_checker=lambda path: checked.append(path)
+            or VoiceContract(True, (), "compatible"),
+            environment_builder=lambda *_args, **_kwargs: {"DISPLAY": ":8"},
+            sleep=lambda _: None,
+            launch_attempts=3,
+            uid=1000,
+        )
+
+        result = controller.toggle_voice()
+
+        self.assertTrue(result.ok)
+        self.assertEqual(checked, [Path(executable).parent / "resources/app.asar"])
+
     def test_status_exposes_selected_launch_configuration(self):
         installation = Installation.appimage(
             Path("/home/deck/.local/share/chatgpt-community-appimage"),
@@ -316,6 +344,7 @@ class ControllerTests(unittest.TestCase):
             },
         )
         self.assertFalse(status["voiceCompatible"])
+        self.assertEqual(status["voiceState"], "pending")
         self.assertIn("start", status["voiceMessage"].lower())
 
 

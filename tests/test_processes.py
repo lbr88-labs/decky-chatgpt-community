@@ -139,6 +139,33 @@ class AppProcessTests(unittest.TestCase):
         self.assertEqual([process.pid for process in result], [500])
         self.assertEqual(result[0].executable, valid)
 
+    def test_appimage_rejects_electron_child_processes_using_main_executable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            proc = Path(directory)
+            executable = (
+                "/home/deck/.cache/chatgpt-runtime/run.A1b2/"
+                "appimage_extracted_deadbeef/opt/codex-desktop/ChatGPT"
+            )
+            for offset, role in enumerate(("renderer", "gpu-process", "utility")):
+                self._process(
+                    proc,
+                    600 + offset,
+                    executable=executable,
+                    cmdline=(executable, f"--type={role}"),
+                    environment={"DISPLAY": ":7"},
+                )
+            self._process(
+                proc,
+                603,
+                executable=executable,
+                cmdline=(executable, "--class=chatgpt-community-appimage"),
+                environment={"DISPLAY": ":7"},
+            )
+
+            result = find_app_processes(self.appimage, proc)
+
+        self.assertEqual([process.pid for process in result], [603])
+
 
 if __name__ == "__main__":
     unittest.main()
