@@ -19,7 +19,7 @@ integration can be installed or updated independently.
 
 ## Current status
 
-Version 0.1.7 supports both ChatGPT Community installation methods. When both
+Version 0.2.0 supports both ChatGPT Community installation methods. When both
 are present, the plugin uses the user-owned AppImage; otherwise it keeps using
 the native `codex-desktop` package exactly as before.
 
@@ -62,6 +62,12 @@ The plugin does not uninstall or replace your working ChatGPT Community app.
 - **Open ChatGPT** creates or reuses a Steam shortcut and switches to the app.
 - **Toggle Voice Mode** remembers the game you are playing, briefly switches to
   ChatGPT, starts or stops its live Voice Mode, and returns to your game.
+- **Recent chats** shows five non-archived chats at a time, newest first. Each
+  row can open the selected chat or open it and start Voice Mode before returning
+  to the running game. Previous, Next, and Refresh keep the Decky panel bounded.
+- **Voice controls** explicitly mute or unmute the active ChatGPT Voice session's
+  microphone and speaker. They do not mute SteamOS, World of Warcraft, or any
+  other application.
 - **Check for Updates** asks `codex-update-manager` for native installations;
   AppImage installations direct you to rerun the Steam Deck app installer,
   because their native updater is intentionally disabled.
@@ -100,6 +106,10 @@ keeps ChatGPT in Steam's process tree, allowing Gamescope to focus its window.
 The shortcut clears Steam's `LD_PRELOAD` only for the ChatGPT launch because
 Steam's overlay library crashes Electron child processes on the tested SteamOS
 version. Gamescope still owns and presents the app normally.
+The shortcut also enables a loopback-only Chromium control endpoint. The plugin
+uses it only to activate ChatGPT's own accessible Voice buttons by their exact
+labels, making mute and unmute state-setting operations idempotent without
+screen coordinates. The endpoint is not exposed on the network.
 For an in-game Voice Mode toggle, the plugin records Steam's currently running
 game, focuses the already-running ChatGPT shortcut without relaunching it,
 invokes the verified app shortcut, then restores the recorded game even when
@@ -123,6 +133,8 @@ SteamOS's Gamescope environment and waits for the verified window.
 ## Privacy and security
 
 - No OpenAI API calls or API keys
+- Recent-chat listing uses the local Codex app-server and requests thread
+  metadata only; it does not fetch message bodies or persist thread identifiers.
 - No conversation, audio, or account-data access
 - No shell commands supplied by the frontend
 - No root Decky backend
