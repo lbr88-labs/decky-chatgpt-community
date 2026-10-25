@@ -5,4 +5,4 @@ Comment=Download, verify, and install the ChatGPT Community Decky plugin
 Icon=steamdeck-gaming-return
 Terminal=false
 Categories=Utility;
-Exec=konsole --hold -e bash -c "rm -f -- /tmp/install-chatgpt-community-decky-v0.1.6.sh; curl --proto '=https' --tlsv1.2 --fail --location --silent --show-error --retry 3 -o /tmp/install-chatgpt-community-decky-v0.1.6.sh https://raw.githubusercontent.com/LBR88/decky-chatgpt-community/v0.1.6/scripts/install.sh && bash /tmp/install-chatgpt-community-decky-v0.1.6.sh; rm -f -- /tmp/install-chatgpt-community-decky-v0.1.6.sh"
+Exec=konsole --hold -e bash -c "rm -f -- /tmp/install-chatgpt-community-decky-v0.1.7.sh; curl --proto '=https' --tlsv1.2 --fail --location --silent --show-error --retry 3 -o /tmp/install-chatgpt-community-decky-v0.1.7.sh https://raw.githubusercontent.com/LBR88/decky-chatgpt-community/v0.1.7/scripts/install.sh && bash /tmp/install-chatgpt-community-decky-v0.1.7.sh; rm -f -- /tmp/install-chatgpt-community-decky-v0.1.7.sh"

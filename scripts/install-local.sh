@@ -31,7 +31,7 @@ install -m 0644 "${repo_root}/README.md" "${target}/README.md"
 install -m 0644 "${repo_root}/LICENSE" "${target}/LICENSE"
 install -m 0644 "${repo_root}/assets/logo.svg" "${target}/assets/logo.svg"
 
-for module in __init__ compatibility controller desktop models processes status; do
+for module in __init__ compatibility controller desktop installations models processes status; do
     install -m 0644 "${repo_root}/backend/${module}.py" "${target}/backend/${module}.py"
 done
 

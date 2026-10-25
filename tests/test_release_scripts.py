@@ -1,4 +1,5 @@
 import hashlib
+import importlib.util
 import json
 import os
 import subprocess
@@ -9,12 +10,44 @@ import zipfile
 from pathlib import Path
 
 from backend.compatibility import VOICE_MARKERS
+from backend.installations import Installation
+from backend.processes import AppProcess
 
 
 ROOT = Path(__file__).parents[1]
 
 
 class ReleaseScriptTests(unittest.TestCase):
+    def test_verifier_selects_running_appimage_bundle_and_native_fallback(self):
+        spec = importlib.util.spec_from_file_location(
+            "verify_installed_app", ROOT / "scripts/verify-installed-app.py"
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        runtime_executable = (
+            "/home/deck/.cache/chatgpt-runtime/run.A1/"
+            "appimage_extracted_deadbeef/opt/codex-desktop/ChatGPT"
+        )
+        appimage = Installation.appimage(
+            Path("/home/deck/.local/share/chatgpt-community-appimage"),
+            Path("/home/deck/.cache/chatgpt-runtime"),
+        )
+
+        selected = module.default_app_asar(
+            installation=appimage,
+            processes=[AppProcess(42, runtime_executable, {})],
+        )
+        native = module.default_app_asar(
+            installation=Installation.native(),
+            processes=[],
+        )
+
+        self.assertEqual(
+            selected,
+            Path(runtime_executable).parent / "resources/app.asar",
+        )
+        self.assertEqual(native, Path("/opt/codex-desktop/resources/app.asar"))
+
     def test_verifier_exit_code_tracks_real_contract(self):
         with tempfile.TemporaryDirectory() as directory:
             app_asar = Path(directory, "app.asar")
@@ -81,6 +114,7 @@ class ReleaseScriptTests(unittest.TestCase):
             f"{prefix}dist/index.js",
             f"{prefix}main.py",
             f"{prefix}backend/controller.py",
+            f"{prefix}backend/installations.py",
             f"{prefix}plugin.json",
             f"{prefix}package.json",
             f"{prefix}README.md",

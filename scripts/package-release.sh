@@ -34,7 +34,7 @@ install -m 0644 "${repo_root}/README.md" "${plugin_root}/README.md"
 install -m 0644 "${repo_root}/LICENSE" "${plugin_root}/LICENSE"
 install -m 0644 "${repo_root}/assets/logo.svg" "${plugin_root}/assets/logo.svg"
 
-for module in __init__ compatibility controller desktop models processes status; do
+for module in __init__ compatibility controller desktop installations models processes status; do
     install -m 0644 "${repo_root}/backend/${module}.py" "${plugin_root}/backend/${module}.py"
 done
 
