@@ -1,6 +1,6 @@
 {
   "name": "decky-chatgpt-community",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Use ChatGPT Community Voice Mode while playing on Steam Deck.",
   "type": "module",
   "scripts": {
